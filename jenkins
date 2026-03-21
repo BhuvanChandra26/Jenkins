@@ -1,0 +1,41 @@
+pipeline {
+    agent any
+
+    stages {
+
+        stage('Build') {
+            steps {
+                sh 'javac Hello.java'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh '''
+                    echo "Running test..."
+                    OUTPUT=$(java Hello)
+                    echo "Program says: $OUTPUT"
+
+                    if [ "$OUTPUT" = "Hello Jenkins" ]; then
+                        echo "Test Passed"
+                    else
+                        echo "Test Failed"
+                        exit 1
+                    fi
+                '''
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                sh '''
+                    echo "Deploying..."
+                    mkdir -p deploy
+                    cp Hello.class deploy/
+                    echo "Deployed to deploy/ folder"
+                '''
+            }
+        }
+    }
+}
+``
