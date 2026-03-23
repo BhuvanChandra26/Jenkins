@@ -1,55 +1,25 @@
-pipeline {
-    agent any
+import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpExchange;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 
-    tools {
-        // Set your configured JDK name if needed:
-        // jdk 'JDK17'
+public class HelloServer {
+    public static void main(String[] args) throws IOException {
+        int port = 8081; // change if needed
+        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+        server.createContext("/", HelloServer::handle);
+        server.setExecutor(null);
+        System.out.println("Server running on http://0.0.0.0:" + port + "/");
+        server.start();
     }
 
-    stages {
-        stage('Checkout') {
-            steps { checkout scm }
-        }
-
-        stage('Build') {
-            steps {
-                sh '''
-                  set -e
-                  test -f HelloServer.java || { echo "HelloServer.java not found"; exit 1; }
-                  mkdir -p out
-                  javac -d out HelloServer.java
-                '''
-            }
-        }
-
-        stage('Run Server') {
-            steps {
-                sh '''
-                  set -e
-                  # Kill any previous instance (best-effort)
-                  (pkill -f "java -cp out HelloServer" || true)
-                  # Start server in background
-                  nohup java -cp out HelloServer > server.log 2>&1 &
-                  sleep 2
-                  echo "Server started. Tail server.log for output."
-                '''
-            }
-        }
-
-        stage('Smoke Test') {
-            steps {
-                sh '''
-                  set -e
-                  curl -sSf http://127.0.0.1:8081/ | tee /dev/stderr | grep -i "hello world"
-                '''
-            }
-        }
-    }
-
-    post {
-        always {
-            echo 'Open http://<agent-ip>:8081/ in your browser to see "Hello World".'
-            echo 'Stop the demo server with: pkill -f "java -cp out HelloServer"'
+    private static void handle(HttpExchange exchange) throws IOException {
+        String response = "Hello World";
+        exchange.getResponseHeaders().add("Content-Type", "text/plain; charset=utf-8");
+        exchange.sendResponseHeaders(200, response.getBytes().length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(response.getBytes());
         }
     }
 }
