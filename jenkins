@@ -1,0 +1,112 @@
+pipeline {
+  agent any
+
+  options {
+    // keep console readable
+    ansiColor('xterm')
+    timestamps()
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Generate Java source') {
+      steps {
+        sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+# Write a minimal HTTP server in Java (NO Java code inside Groovy)
+cat > HelloServer.java <<'EOF'
+import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpExchange;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+
+public class HelloServer {
+    public static void main(String[] args) throws IOException {
+        int port = 8081; // change if needed
+        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+
+        // Use a lambda instead of method reference to avoid "::" confusion
+        server.createContext("/", (HttpExchange exchange) -> {
+            String response = "Hello World";
+            exchange.getResponseHeaders().add("Content-Type", "text/plain; charset=utf-8");
+            exchange.sendResponseHeaders(200, response.getBytes().length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response.getBytes());
+            }
+        });
+
+        server.setExecutor(null);
+        System.out.println("Server running on http://0.0.0.0:" + port + "/");
+        server.start();
+    }
+}
+EOF
+
+echo "Wrote HelloServer.java"
+'''
+      }
+    }
+
+    stage('Build') {
+      steps {
+        sh '''#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p out
+javac -d out HelloServer.java
+echo "Compiled. Classes in ./out"
+'''
+      }
+    }
+
+    stage('Run Server') {
+      steps {
+        sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+# Stop any previous instance (best-effort)
+(pkill -f "java -cp out HelloServer" || true)
+
+# Start server in the background
+nohup java -cp out HelloServer > server.log 2>&1 &
+sleep 2
+
+echo "Server started. Tail server.log for details."
+'''
+      }
+    }
+
+    stage('Smoke Test') {
+      steps {
+        sh '''#!/usr/bin/env bash
+set -euo pipefail
+# Validate response contains Hello World
+curl -sSf http://127.0.0.1:8081/ | tee /dev/stderr | grep -i "hello world"
+'''
+      }
+    }
+
+    stage('Archive') {
+      steps {
+        archiveArtifacts artifacts: 'out/**/*.class,server.log', fingerprint: true
+      }
+    }
+  }
+
+  post {
+    always {
+      echo 'Open http://<agent-ip>:8081/ in your browser to view "Hello World".'
+    }
+    // If you want the server to stop after the job, keep this cleanup.
+    // If you want it to keep running, remove this block.
+    cleanup {
+      sh '(pkill -f "java -cp out HelloServer" || true)'
+    }
+  }
+}
