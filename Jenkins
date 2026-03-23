@@ -1,40 +1,55 @@
 pipeline {
     agent any
 
-    stages {
+    tools {
+        // Set your configured JDK name if needed:
+        // jdk 'JDK17'
+    }
 
+    stages {
         stage('Checkout') {
-            steps {
-                checkout scm
-            }
+            steps { checkout scm }
         }
 
         stage('Build') {
             steps {
                 sh '''
-                    echo "Compiling hello.java..."
-                    javac hello.java
+                  set -e
+                  test -f HelloServer.java || { echo "HelloServer.java not found"; exit 1; }
+                  mkdir -p out
+                  javac -d out HelloServer.java
                 '''
             }
         }
 
-        stage('Test') {
+        stage('Run Server') {
             steps {
                 sh '''
-                    echo "Running Test..."
-                    # Run the Java program (optional)
-                    java hello || true
+                  set -e
+                  # Kill any previous instance (best-effort)
+                  (pkill -f "java -cp out HelloServer" || true)
+                  # Start server in background
+                  nohup java -cp out HelloServer > server.log 2>&1 &
+                  sleep 2
+                  echo "Server started. Tail server.log for output."
                 '''
             }
         }
 
-        stage('Deploy') {
+        stage('Smoke Test') {
             steps {
                 sh '''
-                    echo "Deploy step executing..."
-                    echo "Build successful. Deploying application..."
+                  set -e
+                  curl -sSf http://127.0.0.1:8081/ | tee /dev/stderr | grep -i "hello world"
                 '''
             }
+        }
+    }
+
+    post {
+        always {
+            echo 'Open http://<agent-ip>:8081/ in your browser to see "Hello World".'
+            echo 'Stop the demo server with: pkill -f "java -cp out HelloServer"'
         }
     }
 }
