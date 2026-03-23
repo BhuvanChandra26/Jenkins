@@ -2,8 +2,7 @@ pipeline {
   agent any
 
   options {
-    // keep console readable
-    ansiColor('xterm')
+    // leave only supported options here
     timestamps()
   }
 
@@ -19,7 +18,7 @@ pipeline {
         sh '''#!/usr/bin/env bash
 set -euo pipefail
 
-# Write a minimal HTTP server in Java (NO Java code inside Groovy)
+# Write a minimal HTTP server in Java to a file (keep Java out of Groovy)
 cat > HelloServer.java <<'EOF'
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpExchange;
@@ -32,7 +31,7 @@ public class HelloServer {
         int port = 8081; // change if needed
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
 
-        // Use a lambda instead of method reference to avoid "::" confusion
+        // Use a lambda to avoid method-reference syntax confusion
         server.createContext("/", (HttpExchange exchange) -> {
             String response = "Hello World";
             exchange.getResponseHeaders().add("Content-Type", "text/plain; charset=utf-8");
@@ -103,10 +102,10 @@ curl -sSf http://127.0.0.1:8081/ | tee /dev/stderr | grep -i "hello world"
     always {
       echo 'Open http://<agent-ip>:8081/ in your browser to view "Hello World".'
     }
-    // If you want the server to stop after the job, keep this cleanup.
-    // If you want it to keep running, remove this block.
+    // Stop the server after the pipeline ends (remove this block if you want it to keep running)
     cleanup {
       sh '(pkill -f "java -cp out HelloServer" || true)'
     }
   }
 }
+
